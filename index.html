@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Stylized Cat | Three.js</title>
+    <style>
+        /* CSS: Resets and UI */
+        body { 
+            margin: 0; 
+            padding: 0;
+            overflow: hidden; 
+            background-color: #e0e0e0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        #ui {
+            position: absolute;
+            bottom: 30px;
+            width: 100%;
+            text-align: center;
+            pointer-events: none;
+            color: #333;
+        }
+
+        .label {
+            background: rgba(255, 255, 255, 0.8);
+            padding: 8px 20px;
+            border-radius: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: inline-block;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui">
+        <div class="label">Click to Toggle: Walk / Idle</div>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.150.0/build/three.module.js"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        // --- Core Scene Setup ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87ceeb); // Sky blue
+        scene.fog = new THREE.Fog(0x87ceeb, 5, 15);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 2, 5);
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
+
+        // --- Lighting ---
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+        dirLight.position.set(5, 10, 7);
+        scene.add(dirLight);
+
+        // --- Ground Plane ---
+        const ground = new THREE.Mesh(
+            new THREE.PlaneGeometry(100, 100),
+            new THREE.MeshPhongMaterial({ color: 0x99cc99 }) // Grass green
+        );
+        ground.rotation.x = -Math.PI / 2;
+        scene.add(ground);
+
+        // --- The Cat Model Construction ---
+        const catGroup = new THREE.Group();
+        const mat = new THREE.MeshPhongMaterial({ color: 0x4a4a4a }); // Dark Grey fur
+
+        // Body
+        const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.6, 1.4), mat);
+        body.position.y = 0.7;
+        catGroup.add(body);
+
+        // Head & Ears
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.5, 0.5), mat);
+        head.position.set(0, 1.2, 0.7);
+        
+        const earGeo = new THREE.ConeGeometry(0.1, 0.2, 4);
+        const earL = new THREE.Mesh(earGeo, mat);
+        earL.position.set(-0.2, 0.3, 0);
+        const earR = new THREE.Mesh(earGeo, mat);
+        earR.position.set(0.2, 0.3, 0);
+        head.add(earL, earR);
+        catGroup.add(head);
+
+        // Tail
+        const tailJoint = new THREE.Group();
+        tailJoint.position.set(0, 0.8, -0.7);
+        const tail = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.7), mat);
+        tail.position.z = -0.3; // Offset so it rotates from the base
+        tailJoint.add(tail);
+        catGroup.add(tailJoint);
+
+        // Legs
+        const legGeo = new THREE.BoxGeometry(0.15, 0.4, 0.15);
+        const legs = [];
+        const legOffsets = [
+            [-0.25, 0.2, 0.5], [0.25, 0.2, 0.5],   // Front L/R
+            [-0.25, 0.2, -0.5], [0.25, 0.2, -0.5]  // Back L/R
+        ];
+
+        legOffsets.forEach(offset => {
+            const leg = new THREE.Mesh(legGeo, mat);
+            leg.position.set(...offset);
+            catGroup.add(leg);
+            legs.push(leg);
+        });
+
+        scene.add(catGroup);
+
+        // --- Animation Logic ---
+        let isWalking = false;
+        const clock = new THREE.Clock();
+
+        window.addEventListener('mousedown', () => {
+            isWalking = !isWalking;
+        });
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const t = clock.getElapsedTime();
+
+            if (!isWalking) {
+                // IDLE: Breathing and slow tail wag
+                body.scale.y = 1 + Math.sin(t * 1.5) * 0.03;
+                tailJoint.rotation.y = Math.sin(t * 2) * 0.4;
+                tailJoint.rotation.x = Math.sin(t * 1) * 0.1;
+                // Reset legs
+                legs.forEach(l => l.rotation.x = 0);
+            } else {
+                // WALK: Move forward and swing legs
+                catGroup.position.z += 0.04;
+                if (catGroup.position.z > 6) catGroup.position.z = -6;
+
+                // Leg movement logic
+                legs[0].rotation.x = Math.sin(t * 12) * 0.6; 
+                legs[1].rotation.x = Math.cos(t * 12) * 0.6;
+                legs[2].rotation.x = Math.cos(t * 12) * 0.6;
+                legs[3].rotation.x = Math.sin(t * 12) * 0.6;
+
+                // Head bobbing while walking
+                head.position.y = 1.2 + Math.sin(t * 12) * 0.05;
+                tailJoint.rotation.x = Math.sin(t * 12) * 0.3;
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // --- Handle Window Resize ---
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>
